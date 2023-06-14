@@ -1,8 +1,45 @@
 import asyncio
-import os
-from aiohttp import web
-from aiortc import RTCPeerConnection
+import numpy as np
+import cv2
+from aiortc import RTCPeerConnection, MediaStreamTrack
 from aiortc.contrib.signaling import TcpSocketSignaling
+
+
+class BallStreamTrack(MediaStreamTrack):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+
+def generate_bouncing_ball():
+    """
+    Generate a continuous 2D image of a ball bouncing  across a screen
+    and send to client
+    """
+
+    ball_radius = 20
+    ball_color = (0, 255, 0)
+    ball_pos_x = 0
+    ball_speed = 5
+    image_width = 640
+    image_height = 480
+
+    while True:
+        # Create a blank image
+        image = np.zeros((image_height, image_width, 3), dtype=np.uint8)
+
+        # Update ball position
+        ball_pos_x += ball_speed
+        if ball_pos_x < 0 or ball_pos_x > image_width - ball_radius:
+            ball_speed *= - 1
+
+        # Draw the ball on the image
+        cv2.circle(image, (ball_pos_x, image_height // 2),
+                   ball_radius, ball_color, -1)
+
+        # Convert the image to bytes
+        image_bytes = cv2.imencode('.png', image)[1].tobytes()
+        return image_bytes
 
 
 async def send_offer(signaling):
@@ -20,6 +57,14 @@ async def send_offer(signaling):
 
     # Send offer to client
     await signaling.send(offer)
+
+    # Send images of the bouncing ball to the client
+    await generate_bouncing_ball(signaling)
+
+    # Delay a while before sending next image
+    await asyncio.sleep(0.01)
+
+    #
 
 
 async def handle_client(host, port):
