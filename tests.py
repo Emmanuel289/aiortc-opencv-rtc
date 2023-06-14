@@ -1,10 +1,21 @@
-import client
-import server
+
+import os
+import pytest
+from aiohttp import web
+from server import index
+
+ROOT = os.path.dirname(__file__)
 
 
-def test_client_main_returns_null():
-    assert client.main() == None
+@pytest.mark.asyncio
+async def test_index(aiohttp_client):
+    app = web.Application()
+    app.router.add_get("/", index)
+    client = await aiohttp_client(app)
 
+    response = await client.get('/')
+    assert response.status == 200
 
-def test_server_main_returns_null():
-    assert server.main() == None
+    content = await response.text()
+    expected_content = open(os.path.join(ROOT, "index.html"), "r").read()
+    assert content == expected_content
