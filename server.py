@@ -2,9 +2,10 @@ import asyncio
 import time
 import numpy as np
 import cv2
-from aiortc import RTCPeerConnection, MediaStreamTrack
+from aiortc import RTCPeerConnection, MediaStreamTrack, RTCSessionDescription
 from aiortc.contrib.signaling import TcpSocketSignaling
 from av import VideoFrame
+from logger import app_log
 
 
 class BouncingBallTrack(MediaStreamTrack):
@@ -25,9 +26,6 @@ class BouncingBallTrack(MediaStreamTrack):
         self.timestamp = 0
 
     async def recv(self) -> VideoFrame:
-        """
-        Receives the next video frame of the bouncing ball
-        """
         # Create a blank image
         image = np.zeros(
             (self.image_height, self.image_width, 3), dtype=np.uint8)
@@ -41,13 +39,9 @@ class BouncingBallTrack(MediaStreamTrack):
         cv2.circle(image, (self.ball_pos_x, self.image_height // 2),
                    self.ball_radius, self.ball_color, -1)
 
-        # Convert the image to bytes
-        image_bytes = cv2.imencode('.png', image)[1].tobytes()
-
-        # Create a video frame from the image bytes
-        timestamp = self._next_time_stamp()
-        frame = VideoFrame(width=self.image_width, height=self.image_height,
-                           data=image_bytes, timestamp=timestamp)
+        # timestamp = self._next_time_stamp()
+        # Generate frame from image array
+        frame = VideoFrame.from_ndarray(image, format="bgr24")
 
         return frame
 
@@ -56,44 +50,28 @@ class BouncingBallTrack(MediaStreamTrack):
         return self.timestamp
 
 
-async def offer():
+async def run_server():
     pc = RTCPeerConnection()
+    signaling = TcpSocketSignaling('localhost', 8080)
+    await signaling.connect()
+    pc.addTrack(BouncingBallTrack())
 
-    offer = pc.createOffer()
+    # handle offer
+    offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    await signaling.send(offer)
 
-    @pc.on("datachannel")
-    def on_datachannel(channel):
-        @channel.on("message")
-        def on_message(message):
-            if isinstance(message, str) and message.startswith("ping"):
-                channel.send("pong" + message[4:])
+    while True:
+        message = await signaling.receive()
+        if message.type == 'answer':
+            answer = RTCSessionDescription(sdp=message.sdp, type='answer')
+            curr_time = time.strftime('%X')
+            app_log.info(
+                "Received answer from client at %s:\n %s ", curr_time, answer.sdp)
+            break
 
-     # handle offer
-    await pc.setRemoteDescription(offer)
-
-    # send answer
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
-
-
-async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-
-    print('Client handler has been called at:', time.strftime('%X'))
-    print('Sleep for one second')
-    await asyncio.sleep(1)
-    print('Handling client connection')
+    await signaling.close()
 
 
-async def main():
-    server = await asyncio.start_server(handle_client, host='localhost', port=8080)
-
-    addr = server.sockets[0].getsockname()
-
-    print(f'Server started on {addr[0]}:{addr[1]}')
-
-    async with server:
-        await server.serve_forever()
-
-
-if __name__ == '__main__':
-    asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(run_server())

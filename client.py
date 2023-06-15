@@ -1,70 +1,52 @@
 import asyncio
 import time
 import cv2
-from aiortc import RTCPeerConnection
+from aiortc import RTCPeerConnection, MediaStreamTrack
 from aiortc.contrib.signaling import TcpSocketSignaling
+from logger import app_log
 
 
-async def receive_offer(signaling):
+class VideoTransformTrack(MediaStreamTrack):
 
-    print('Client now receiving offer at:', time.strftime('%X'))
-    # Receive the offer from the server
+    kind = "video"
+
+    def __init__(self):
+        super().__init__()
+
+    async def recv(self):
+        frame = await self.track.recv()
+        app_log.info("received frame is:", frame)
+        image = frame.to_ndarray(format="bgr24")
+        app_log.info("received image is:", image)
+        cv2.imshow("Video", image)
+        cv2.waitKey(1)
+        return frame
+
+
+async def run_client():
+    signaling = TcpSocketSignaling('localhost', 8080)
     offer = await signaling.receive()
-    print('offer is', offer)
+    curr_time = time.strftime('%X')
+    app_log.info('Received offer from server at %s is:\n %s',
+                 curr_time, offer.sdp)
 
-    # Create a peer connection
     pc = RTCPeerConnection()
+    pc.addTrack(VideoTransformTrack())
 
-    @pc.on("track")
-    async def on_track(track):
-        print(f"Track received: {track.kind}")
-
-        # Start receiving frames from the server
-        while True:
-            frame = await track.recv()
-
-            # Display the received frame using OpenCV
-            image = frame.to_ndarray()
-            cv2.imshow('Received Frame', image)
-            if cv2.waitKey(1) == 27:  # ESC key
-                break
-
-    # Set the remote description of the peer connection
     await pc.setRemoteDescription(offer)
 
-    # Create an answer
-    answer = await pc.createAnswer()
+    while True:
+        answer = await pc.createAnswer()
+        if answer.type == "answer":
+            app_log.info("Created answer is:\n %s", answer)
+            await pc.setLocalDescription(answer)
+            await signaling.send(answer)
+            break
 
-    # Set the local description of the peer connection
-    await pc.setLocalDescription(answer)
-
-    # Send the answer to the server
-    await signaling.send(answer)
-
-    # Close the peer connection
-    await pc.close()
+    await signaling.close()
 
 
-async def main():
-    # Create a signaling instance for the server
-    signaling = TcpSocketSignaling('localhost', 8080)
-
-    print('host is', signaling._host)
-    print('port no is', signaling._port)
-
-    # Connect to the server and receive the offer
-    await receive_offer(signaling)
-
-    # Run the event loop until interrupted
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        pass
-
-    # Close the signaling connection
-    signaling.close()
-
-
-if __name__ == '__main__':
-    asyncio.run(main())
+if __name__ == "__main__":
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(run_client())
+    asyncio.run(run_client())
