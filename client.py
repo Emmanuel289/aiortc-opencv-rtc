@@ -5,8 +5,11 @@ from aiortc import RTCPeerConnection, MediaStreamTrack
 from aiortc.contrib.signaling import TcpSocketSignaling
 from logger import app_log
 
+WIDTH = 640
+HEIGHT = 480
 
-class VideoTransformTrack(MediaStreamTrack):
+
+class DispayVideoStreamTrack(MediaStreamTrack):
 
     kind = "video"
 
@@ -14,13 +17,23 @@ class VideoTransformTrack(MediaStreamTrack):
         super().__init__()
 
     async def recv(self):
-        frame = await self.track.recv()
-        app_log.info("received frame is:", frame)
-        image = frame.to_ndarray(format="bgr24")
-        app_log.info("received image is:", image)
-        cv2.imshow("Video", image)
-        cv2.waitKey(1)
-        return frame
+        while True:
+            frame = await self.frames.get()
+
+            # Convert the frame to BGR
+            bgr_frame = cv2.cvtColor(frame.to_ndarray(
+                format="bgr24"), cv2.COLOR_RGB2BGR)
+
+            # Display the frame
+            cv2.imshow("Video Stream", bgr_frame)
+            cv2.waitKey(1)
+
+            # Convert the frame to bytes
+            frame_bytes = bgr_frame.tobytes()
+
+            # Yield the frame for transmission
+            pts, time_base = self.next_timestamp()
+            yield cv2.UMat.get(frame_bytes), pts, time_base
 
 
 async def run_client():
@@ -31,7 +44,7 @@ async def run_client():
                  curr_time, offer.sdp)
 
     pc = RTCPeerConnection()
-    pc.addTrack(VideoTransformTrack())
+    pc.addTrack(DispayVideoStreamTrack())
 
     await pc.setRemoteDescription(offer)
 
@@ -49,4 +62,12 @@ async def run_client():
 if __name__ == "__main__":
     # loop = asyncio.get_event_loop()
     # loop.run_until_complete(run_client())
+
+    # Initialize OpenCV window - DEBUG
+    # cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
+    # cv2.resizeWindow("Video Stream", WIDTH, HEIGHT)
+
     asyncio.run(run_client())
+
+    # Close OpenCV window - DEBUG
+    # cv2.destroyAllWindows()
