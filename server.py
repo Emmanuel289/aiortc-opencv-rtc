@@ -1,4 +1,5 @@
 import asyncio
+import time
 import numpy as np
 import cv2
 from aiortc import RTCPeerConnection, MediaStreamTrack
@@ -21,6 +22,7 @@ class BouncingBallTrack(MediaStreamTrack):
         self.ball_speed = 5
         self.image_width = 640
         self.image_height = 480
+        self.timestamp = 0
 
     async def recv(self) -> VideoFrame:
         """
@@ -54,57 +56,43 @@ class BouncingBallTrack(MediaStreamTrack):
         return self.timestamp
 
 
-async def send_offer(signaling):
-    # Create peer connection
+async def offer():
     pc = RTCPeerConnection()
 
-    # Create an offer
-    offer = await pc.createOffer()
+    offer = pc.createOffer()
 
-    # Set the local description of the peer connection
-    await pc.setLocalDescription(offer)
+    @pc.on("datachannel")
+    def on_datachannel(channel):
+        @channel.on("message")
+        def on_message(message):
+            if isinstance(message, str) and message.startswith("ping"):
+                channel.send("pong" + message[4:])
 
-    # Send offer to client
-    await signaling.send(offer)
+     # handle offer
+    await pc.setRemoteDescription(offer)
+
+    # send answer
+    answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
 
 
-async def handle_client(reader, writer):
-    # Create a signaling instance for the client
-    signaling = TcpSocketSignaling(reader, writer)
+async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
 
-    # Send the offer to the client
-    send_offer(signaling)
-
-    # Create a ball stream track
-    ball_stream_track = BouncingBallTrack()
-
-    # Create a peer connection
-    pc = RTCPeerConnection()
-
-    @pc.on("track")
-    def on_track(track):
-        print(f"Track {track.kind} received")
-
-    # Add the ball to the peer connection
-    pc.addTrack(ball_stream_track)
-
-    # Set the remote description of the peer connection
-    answer = await signaling.receive()
-    await pc.setRemoteDescription(answer)
-
-    # Close the signaling connection
-    signaling.close()
+    print('Client handler has been called at:', time.strftime('%X'))
+    print('Sleep for one second')
+    await asyncio.sleep(1)
+    print('Handling client connection')
 
 
 async def main():
-    server = await asyncio.start_server(handle_client, host='0.0.0.0', port=8080)
+    server = await asyncio.start_server(handle_client, host='localhost', port=8080)
 
     addr = server.sockets[0].getsockname()
 
     print(f'Server started on {addr[0]}:{addr[1]}')
 
     async with server:
-        await server.start_serving()
+        await server.serve_forever()
 
 
 if __name__ == '__main__':
