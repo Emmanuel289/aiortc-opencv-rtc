@@ -4,6 +4,7 @@ import numpy as np
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, MediaStreamTrack
 from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 from av import VideoFrame
+from multiprocessing import Process, Queue
 from logger import app_log
 
 HOST_IP = '127.0.0.1'
@@ -24,9 +25,21 @@ class ImageDisplayReceiver(MediaStreamTrack):
         super().__init__()
         self.track = track
 
+        self.frame_queue = Queue(10)
+        # Start a new mp.Process and send received frames to an mp.Queue
+        self.process_a = Process(target=self.recv_frames,
+                                 args=(self.frame_queue,))
+        self.process_a.start()
+
     async def recv(self):
         print('inside recv()')
-        frame = await self.track.recv()
+
+        while True:
+            frame = await self.track.recv()
+            image = frame.to_ndarray(format="bgr24")
+            print('current image is', image)
+            self.frame_queue.put(image)
+            print('queue size is', self.frame_queue.qsize())
 
         # Debug -> CV not loading image
         # image = frame.to_ndarray(format="bgr24")
@@ -39,7 +52,16 @@ class ImageDisplayReceiver(MediaStreamTrack):
         # if cv.waitKey(1) & 0xFF == ord('q'):
         #     break
 
-        return frame
+        # return frame
+
+    def recv_frames(self, frame_queue):
+        while True:
+            image = frame_queue.get()
+            # Process the frame as needed
+            # Example: Display the image using OpenCV
+            cv.imshow("Bouncing Ball", image)
+            cv.waitKey(1)  # Wait until a key is pressed
+            cv.destroyAllWindows()  # Close the window
 
 
 async def display_ball_frames(pc, signaling):
