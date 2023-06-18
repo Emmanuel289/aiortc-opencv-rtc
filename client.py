@@ -1,9 +1,9 @@
 import asyncio
+import time
 import cv2 as cv
 import numpy as np
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, MediaStreamTrack
 from aiortc.contrib.signaling import TcpSocketSignaling, BYE
-from av import VideoFrame
 from multiprocessing import Process, Queue, Value
 from logger import app_log
 
@@ -26,7 +26,6 @@ class ImageDisplayReceiver(MediaStreamTrack):
         self.track = track
 
     async def recv(self):
-        app_log.info('inside client recv()')
         while True:
 
             frame = await self.track.recv()
@@ -34,12 +33,12 @@ class ImageDisplayReceiver(MediaStreamTrack):
             frame_queue.put(image)
 
 
-def process_frame(queue, ball_location):
+def process_frame(queue, ball_location_x, ball_location_y):
     app_log.info('Processing frames...')
 
     while True:
         image = queue.get()
-        app_log.info('queue size: %s', frame_queue.qsize())
+        # app_log.info('queue size: %s', frame_queue.qsize())
 
         # # Display the image
         # cv.imshow("Bouncing Ball", image)
@@ -71,10 +70,9 @@ def process_frame(queue, ball_location):
 
             # Display the ball center
 
-        # Store the ball coordinates in multiprocessing.Value
+        # Store the ball coordinates as a  multiprocessing.Value
         if ball_x is not None and ball_y is not None:
-            ball_location = (ball_x, ball_y)
-            app_log.info('Value stored is %s', ball_location)
+            ball_location_x.value, ball_location_y.value = ball_x, ball_y
 
         # Exit if 'q' is pressed
         if cv.waitKey(1) & 0xFF == ord('q'):
@@ -83,8 +81,101 @@ def process_frame(queue, ball_location):
     cv.destroyAllWindows()
 
 
-async def display_ball_frames(pc, signaling):
-    app_log.info("Display ball frames...")
+def channel_log(channel, t, message):
+    print("channel(%s) %s %s" % (channel.label, t, message))
+
+
+def channel_log_ball_position(*args):
+
+    print("x coordinate is", args[0])
+    print("y coordinate is", args[1])
+
+
+def channel_send(channel, message):
+    channel_log(channel, ">", message)
+    channel.send(message)
+
+
+async def consume_signaling(pc, signaling):
+    while True:
+        obj = await signaling.receive()
+
+        if isinstance(obj, RTCSessionDescription):
+            await pc.setRemoteDescription(obj)
+
+            if obj.type == "offer":
+                # send answer
+                await pc.setLocalDescription(await pc.createAnswer())
+                await signaling.send(pc.localDescription)
+        elif isinstance(obj, RTCIceCandidate):
+            await pc.addIceCandidate(obj)
+        elif obj is BYE:
+            print("Exiting")
+            break
+
+
+time_start = None
+
+
+def current_stamp():
+    global time_start
+
+    if time_start is None:
+        time_start = time.time()
+        return 0
+    else:
+        return int((time.time() - time_start) * 1000000)
+
+
+# Data path for sending positions of moving ball to server
+
+
+async def run_offer(pc, signaling):
+    app_log.info("Server is sending HIs...")
+    await signaling.connect()
+
+    channel = pc.createDataChannel("chat")
+    channel_log(channel, "-", "created by local party")
+
+    async def send_pings():
+        while True:
+            channel_send(channel, "HI %d" % current_stamp())
+            await asyncio.sleep(1)
+
+    @channel.on("open")
+    def on_open():
+        asyncio.ensure_future(send_pings())
+
+    @channel.on("message")
+    def on_message(message):
+        channel_log(channel, "<", message)
+        print('message is', message)
+        if isinstance(message, str) and message.startswith("BYE"):
+            print('Success!')
+
+
+# Data path
+async def run_answer(pc, signaling):
+    app_log.info("Client is replying with BYEs...")
+    await signaling.connect()
+
+    @pc.on("datachannel")
+    def on_datachannel(channel):
+        channel_log(channel, "-", "created by remote party")
+
+        @channel.on("message")
+        def on_message(message):
+            channel_log(channel, "<", message)
+
+            if isinstance(message, str) and message.startswith("HI"):
+                # reply
+                channel_send(channel, "BYE" + message[3:])
+
+    await consume_signaling(pc, signaling)
+
+
+async def run_signaling(pc, signaling):
+    app_log.info("Signaling path on client...")
 
     @pc.on("track")
     def on_track(track):
@@ -95,54 +186,8 @@ async def display_ball_frames(pc, signaling):
     # connect signaling
     await signaling.connect()
 
-    # consume signaling
-    while True:
-        obj = await signaling.receive()
-        if isinstance(obj, RTCSessionDescription):
-            await pc.setRemoteDescription(obj)
-
-            if obj.type == "offer":
-                # send answer
-                app_log.info("Client received offer")
-                await pc.setLocalDescription(await pc.createAnswer())
-                await signaling.send(pc.localDescription)
-        elif isinstance(obj, RTCIceCandidate):
-            await pc.addIceCandidate(obj)
-        elif obj is BYE:
-            app_log.warning("Exiting")
-            break
-
-
-async def receive_offer_send_answer(pc, signaling):
-    app_log.info("Receive Offer and Send Answer")
-
-    @pc.on("track")
-    def on_track(track):
-        app_log.info("Receiving %s" % track.kind)
-
-    # connect signaling
-    await signaling.connect()
-
-    # consume signaling
-    while True:
-        obj = await signaling.receive()
-        if isinstance(obj, RTCSessionDescription):
-            await pc.setRemoteDescription(obj)
-
-            if obj.type == "offer":
-                # send answer
-                # add_tracks()
-                app_log.info("Client received offer")
-                answer = await pc.createAnswer()
-                await pc.setLocalDescription(answer)
-                app_log.info("Answer sent %s", answer.sdp)
-                await signaling.send(pc.localDescription)
-        elif isinstance(obj, RTCIceCandidate):
-            await pc.addIceCandidate(obj)
-        elif obj is BYE:
-            app_log.warning("Exiting")
-            break
-
+    # Send pong
+    await run_answer(pc, signaling)
 
 if __name__ == "__main__":
     signaling = TcpSocketSignaling(HOST_IP, PORT_NO)
@@ -152,16 +197,17 @@ if __name__ == "__main__":
 
     frame_queue = Queue(10)
 
-    ball_location = Value('i', 0)
+    ball_location_x = Value('i', 0)
+    ball_location_y = Value('i', 0)
     process_a = Process(target=process_frame,
-                        args=(frame_queue, ball_location))
+                        args=(frame_queue, ball_location_x, ball_location_y))
+    print('ball location after', ball_location_x.value)
+
     process_a.start()
 
     try:
-        # loop.run_until_complete(
-        # receive_offer_send_answer(peer_connection, signaling))
         loop.run_until_complete(
-            display_ball_frames(peer_connection, signaling))
+            run_signaling(peer_connection, signaling))
     except KeyboardInterrupt:
         pass
     finally:

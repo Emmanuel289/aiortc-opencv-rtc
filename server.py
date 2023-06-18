@@ -1,6 +1,5 @@
 import asyncio
 import fractions
-from queue import Queue
 import time
 import numpy as np
 import cv2 as cv
@@ -8,6 +7,7 @@ from aiortc import (
     RTCPeerConnection,
     MediaStreamTrack,
     RTCSessionDescription,
+    RTCIceCandidate,
 )
 from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 from av import VideoFrame
@@ -30,7 +30,7 @@ class BouncingBallTrack(MediaStreamTrack):
     kind = "video"
 
     def __init__(self):
-        super().__init__()  # did not forget this!
+        super().__init__()
         self.ball_radius = 10
         self.ball_color = (0, 0, 255)
         self.ball_speed = 10
@@ -45,7 +45,7 @@ class BouncingBallTrack(MediaStreamTrack):
         self.ball_dx = self.ball_speed
         self.ball_dy = self.ball_speed
 
-    def generate_ball(self):
+    def generate_moving_ball(self):
         while True:
             # Create a blank canvas
             canvas = np.zeros(
@@ -62,8 +62,7 @@ class BouncingBallTrack(MediaStreamTrack):
             if self.ball_y + self.ball_radius >= self.canvas_height or self.ball_y - self.ball_radius <= 0:
                 self.ball_dy *= -1  # Reverse vertical velocity
 
-            print(
-                f"Location of ball reported by server: x={self.ball_x}, y={self.ball_y}")
+            # self.print_ball_coordinates()
 
             # Draw the ball on the canvas
             cv.circle(canvas, (self.ball_x, self.ball_y),
@@ -82,56 +81,19 @@ class BouncingBallTrack(MediaStreamTrack):
             return canvas
 
     async def recv(self):
-        print('Inside recv()')
 
-        canvas = self.generate_ball()
-        frame = VideoFrame.from_ndarray(canvas, format="bgr24")
+        ball_canvas = self.generate_moving_ball()
+        frame = VideoFrame.from_ndarray(ball_canvas, format="bgr24")
 
         pts, time_base = await self.next_timestamp()
         frame.pts = pts
         frame.time_base = time_base
         return frame
 
-        # while True:
-        #     # Create a blank canvas
-        #     canvas = np.zeros(
-        #         (self.canvas_height, self.canvas_width, 3), dtype=np.uint8)
-        #     canvas.fill(255)
-
-        #     self.update_ball_position()
-        #     self.print_ball_coordinates()
-        #     # Draw the ball on the canvas
-        #     cv.circle(canvas, (self.ball_x, self.ball_y),
-        #               self.ball_radius, self.ball_color, -1)
-
-        #     frame = VideoFrame.from_ndarray(canvas, format="bgr24")
-
-        #     pts, time_base = await self.next_timestamp()
-        #     frame.pts = pts
-        #     frame.time_base = time_base
-        #     return frame
-
-    def update_ball_position(self):
-        # Update ball position
-        self.ball_x += self.ball_dx
-        self.ball_y += self.ball_dy
-
-        # Check if the ball hits the boundaries
-        if (
-            self.ball_x + self.ball_radius >= self.canvas_width
-            or self.ball_x - self.ball_radius <= 0
-        ):
-            self.ball_dx *= -1  # Reverse horizontal velocity
-        if (
-            self.ball_y + self.ball_radius >= self.canvas_height
-            or self.ball_y - self.ball_radius <= 0
-        ):
-            self.ball_dy *= -1  # Reverse vertical velocity
-
     def print_ball_coordinates(self):
         # Print the ball's coordinates
         print(
-            f"Location of ball reported by server: x={self.ball_x}, y={self.ball_y}"
+            f"Ball's position from server end: x={self.ball_x}, y={self.ball_y}"
         )
 
     async def next_timestamp(self):
@@ -146,34 +108,102 @@ class BouncingBallTrack(MediaStreamTrack):
         return self._timestamp, VIDEO_TIME_BASE
 
 
-async def send_offer_receive_answer(pc, signaling):
-    """
-    Creates an SDP offer and sends to client peer. Also receives answer 
-    from client and logs an ACK message
-    """
-    bouncing_ball = BouncingBallTrack()
+def channel_log(channel, t, message):
+    print("channel(%s) %s %s" % (channel.label, t, message))
 
-    pc.addTrack(bouncing_ball)  # add bouncing ball media track
+
+def channel_send(channel, message):
+    channel_log(channel, ">", message)
+    channel.send(message)
+
+
+async def consume_signaling(pc, signaling):
+    while True:
+        obj = await signaling.receive()
+
+        if isinstance(obj, RTCSessionDescription):
+            await pc.setRemoteDescription(obj)
+
+            if obj.type == "offer":
+                # send answer
+                answer = await pc.createAnswer()
+                await pc.setLocalDescription(answer)
+                app_log.info(
+                    'Offer was received from server and answer was generated')
+                await signaling.send(pc.localDescription)
+        elif isinstance(obj, RTCIceCandidate):
+            await pc.addIceCandidate(obj)
+        elif obj is BYE:
+            print("Exiting")
+            break
+
+
+time_start = None
+
+
+def current_stamp():
+    global time_start
+
+    if time_start is None:
+        time_start = time.time()
+        return 0
+    else:
+        return int((time.time() - time_start) * 1000000)
+
+
+async def run_offer(pc, signaling):
+    app_log.info("Server is sending HIs...")
+    await signaling.connect()
+
+    channel = pc.createDataChannel("chat")
+    channel_log(channel, "-", "created by local party")
+
+    async def send_pings():
+        while True:
+            channel_send(channel, "HI %d" % current_stamp())
+            await asyncio.sleep(1)
+
+    @channel.on("open")
+    def on_open():
+        asyncio.ensure_future(send_pings())
+
+    @channel.on("message")
+    def on_message(message):
+        channel_log(channel, "<", message)
+        print('message is', message)
+        if isinstance(message, str) and message.startswith("BYE"):
+            print("Success!")
+
+    # send offer
+    await pc.setLocalDescription(await pc.createOffer())
+    await signaling.send(pc.localDescription)
+
+    await consume_signaling(pc, signaling)
+
+
+async def run_signaling(pc, signaling):
+
+    app_log.info("Signaling path on server...")
 
     # connect signaling
 
     await signaling.connect()
+    bouncing_ball = BouncingBallTrack()
 
-    # create offer and send
+    # add bouncing ball media track
+    pc.addTrack(bouncing_ball)
+
+    # Send pings
+
+    await run_offer(pc, signaling)
+    # Receive ball positions
+    # await receive_ball_positions(pc, signaling)
+    # send offer
     offer = await pc.createOffer()
-    app_log.info('Offer created ...')
+    app_log.info('Offer was created and sent to client')
     await pc.setLocalDescription(offer)
     await signaling.send(pc.localDescription)
 
-    # consume signaling
-    while True:
-        obj = await signaling.receive()
-        if isinstance(obj, RTCSessionDescription):
-            await pc.setRemoteDescription(obj)
-
-            if obj.type == "answer":
-                app_log.info(
-                    "Answer %s", obj.sdp)
 
 if __name__ == "__main__":
     signaling = TcpSocketSignaling(HOST_IP, PORT_NO)
@@ -184,7 +214,7 @@ if __name__ == "__main__":
 
     try:
         loop.run_until_complete(
-            send_offer_receive_answer(peer_connection, signaling))
+            run_signaling(peer_connection, signaling))
     except KeyboardInterrupt:
         pass
     finally:
