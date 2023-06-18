@@ -4,7 +4,7 @@ import numpy as np
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, MediaStreamTrack
 from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 from av import VideoFrame
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, Value
 from logger import app_log
 
 HOST_IP = '127.0.0.1'
@@ -26,7 +26,7 @@ class ImageDisplayReceiver(MediaStreamTrack):
         self.track = track
 
     async def recv(self):
-        print('inside client recv()')
+        app_log.info('inside client recv()')
         while True:
 
             frame = await self.track.recv()
@@ -34,12 +34,12 @@ class ImageDisplayReceiver(MediaStreamTrack):
             frame_queue.put(image)
 
 
-def process_frame(queue):
-    print('inside process_frame')
+def process_frame(queue, ball_location):
+    app_log.info('Processing frames...')
 
     while True:
         image = queue.get()
-        print('queue size inside process_frame is', frame_queue.qsize())
+        app_log.info('queue size: %s', frame_queue.qsize())
 
         # # Display the image
         # cv.imshow("Bouncing Ball", image)
@@ -65,9 +65,16 @@ def process_frame(queue):
             center_x = x + w // 2
             center_y = y + h // 2
 
+            # Store the ball center coordinates
+            ball_x = center_x
+            ball_y = center_y
+
             # Display the ball center
-            print(
-                f"Ball location reported by client: x={center_x}, y={center_y}")
+
+        # Store the ball coordinates in multiprocessing.Value
+        if ball_x is not None and ball_y is not None:
+            ball_location = (ball_x, ball_y)
+            app_log.info('Value stored is %s', ball_location)
 
         # Exit if 'q' is pressed
         if cv.waitKey(1) & 0xFF == ord('q'):
@@ -77,11 +84,11 @@ def process_frame(queue):
 
 
 async def display_ball_frames(pc, signaling):
-    print("Display ball frames...")
+    app_log.info("Display ball frames...")
 
     @pc.on("track")
     def on_track(track):
-        print("Receiving %s" % track.kind)
+        app_log.info("Receiving %s" % track.kind)
         if track.kind == "video":
             pc.addTrack(ImageDisplayReceiver(track))
 
@@ -96,22 +103,22 @@ async def display_ball_frames(pc, signaling):
 
             if obj.type == "offer":
                 # send answer
-                print("Received offer")
+                app_log.info("Client received offer")
                 await pc.setLocalDescription(await pc.createAnswer())
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             await pc.addIceCandidate(obj)
         elif obj is BYE:
-            print("Exiting")
+            app_log.warning("Exiting")
             break
 
 
 async def receive_offer_send_answer(pc, signaling):
-    print("Receive Offer and Send Answer")
+    app_log.info("Receive Offer and Send Answer")
 
     @pc.on("track")
     def on_track(track):
-        print("Receiving %s" % track.kind)
+        app_log.info("Receiving %s" % track.kind)
 
     # connect signaling
     await signaling.connect()
@@ -125,15 +132,15 @@ async def receive_offer_send_answer(pc, signaling):
             if obj.type == "offer":
                 # send answer
                 # add_tracks()
-                print("Received offer")
+                app_log.info("Client received offer")
                 answer = await pc.createAnswer()
                 await pc.setLocalDescription(answer)
-                print("Answer sent %s", answer.sdp)
+                app_log.info("Answer sent %s", answer.sdp)
                 await signaling.send(pc.localDescription)
         elif isinstance(obj, RTCIceCandidate):
             await pc.addIceCandidate(obj)
         elif obj is BYE:
-            print("Exiting")
+            app_log.warning("Exiting")
             break
 
 
@@ -142,10 +149,13 @@ if __name__ == "__main__":
 
     peer_connection = RTCPeerConnection()
     loop = asyncio.get_event_loop()
+
     frame_queue = Queue(10)
-    process_a = Process(target=process_frame, args=(frame_queue,))
+
+    ball_location = Value('i', 0)
+    process_a = Process(target=process_frame,
+                        args=(frame_queue, ball_location))
     process_a.start()
-    print("PID:", process_a.pid)
 
     try:
         # loop.run_until_complete(
