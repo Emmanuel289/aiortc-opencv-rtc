@@ -25,43 +25,55 @@ class ImageDisplayReceiver(MediaStreamTrack):
         super().__init__()
         self.track = track
 
-        self.frame_queue = Queue(10)
-        # Start a new mp.Process and send received frames to an mp.Queue
-        self.process_a = Process(target=self.recv_frames,
-                                 args=(self.frame_queue,))
-        self.process_a.start()
-
     async def recv(self):
-        print('inside recv()')
-
+        print('inside client recv()')
         while True:
+
             frame = await self.track.recv()
             image = frame.to_ndarray(format="bgr24")
-            print('current image is', image)
-            self.frame_queue.put(image)
-            print('queue size is', self.frame_queue.qsize())
+            frame_queue.put(image)
 
-        # Debug -> CV not loading image
-        # image = frame.to_ndarray(format="bgr24")
-        # Create a window and display the image
+
+def process_frame(queue):
+    print('inside process_frame')
+
+    while True:
+        image = queue.get()
+        print('queue size inside process_frame is', frame_queue.qsize())
+
+        # # Display the image
         # cv.imshow("Bouncing Ball", image)
-        # cv.waitKey(1)  # Wait until a key is pressed
-        # cv.destroyAllWindows()  # Close the window
 
-        # # Exit if 'q' is pressed
-        # if cv.waitKey(1) & 0xFF == ord('q'):
-        #     break
+        # Convert the image to grayscale for easier ball detection
+        gray_image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
-        # return frame
+        # Perform ball detection using any suitable technique (e.g., thresholding, contour detection, etc.)
+        # Modify the code below based on the specific ball detection method you want to use
 
-    def recv_frames(self, frame_queue):
-        while True:
-            image = frame_queue.get()
-            # Process the frame as needed
-            # Example: Display the image using OpenCV
-            cv.imshow("Bouncing Ball", image)
-            cv.waitKey(1)  # Wait until a key is pressed
-            cv.destroyAllWindows()  # Close the window
+        # Apply thresholding to separate the ball from the background
+        _, binary_image = cv.threshold(
+            gray_image, 0, 255, cv.THRESH_BINARY_INV+cv.THRESH_OTSU)
+
+        # Find contours in the binary image
+        contours, _ = cv.findContours(
+            binary_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+
+        # Process each contour
+        for contour in contours:
+            # Compute the center of each contour
+            (x, y, w, h) = cv.boundingRect(contour)
+            center_x = x + w // 2
+            center_y = y + h // 2
+
+            # Display the ball center
+            print(
+                f"Ball location reported by client: x={center_x}, y={center_y}")
+
+        # Exit if 'q' is pressed
+        if cv.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cv.destroyAllWindows()
 
 
 async def display_ball_frames(pc, signaling):
@@ -129,8 +141,11 @@ if __name__ == "__main__":
     signaling = TcpSocketSignaling(HOST_IP, PORT_NO)
 
     peer_connection = RTCPeerConnection()
-
     loop = asyncio.get_event_loop()
+    frame_queue = Queue(10)
+    process_a = Process(target=process_frame, args=(frame_queue,))
+    process_a.start()
+    print("PID:", process_a.pid)
 
     try:
         # loop.run_until_complete(

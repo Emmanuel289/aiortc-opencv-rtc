@@ -31,47 +31,108 @@ class BouncingBallTrack(MediaStreamTrack):
 
     def __init__(self):
         super().__init__()  # did not forget this!
-
-    async def recv(self):
-        app_log.info('Inside recv()')
-        ball_radius = 10
-        ball_color = (0, 0, 255)
-        ball_speed = 1
+        self.ball_radius = 10
+        self.ball_color = (0, 0, 255)
+        self.ball_speed = 10
 
         # Define canvas properties
-        canvas_width = 640 * 3
-        canvas_height = 480 * 3
+        self.canvas_width = 640
+        self.canvas_height = 480
 
         # Initialize ball position and velocity
-        ball_x = canvas_width // 2
-        ball_y = canvas_height // 2
-        ball_dx = ball_speed
-        ball_dy = ball_speed
+        self.ball_x = self.canvas_width // 2
+        self.ball_y = self.canvas_height // 2
+        self.ball_dx = self.ball_speed
+        self.ball_dy = self.ball_speed
 
+    def generate_ball(self):
         while True:
             # Create a blank canvas
-            canvas = np.zeros((canvas_height, canvas_width, 3), dtype=np.uint8)
+            canvas = np.zeros(
+                (self.canvas_height, self.canvas_width, 3), dtype=np.uint8)
             canvas.fill(255)
 
             # Update ball position
-            ball_x += ball_dx
-            ball_y += ball_dy
+            self.ball_x += self.ball_dx
+            self.ball_y += self.ball_dy
 
             # Check if the ball hits the boundaries
-            if ball_x + ball_radius >= canvas_width or ball_x - ball_radius <= 0:
-                ball_dx *= -1  # Reverse horizontal velocity
-            if ball_y + ball_radius >= canvas_height or ball_y - ball_radius <= 0:
-                ball_dy *= -1  # Reverse vertical velocity
+            if self.ball_x + self.ball_radius >= self.canvas_width or self.ball_x - self.ball_radius <= 0:
+                self.ball_dx *= -1  # Reverse horizontal velocity
+            if self.ball_y + self.ball_radius >= self.canvas_height or self.ball_y - self.ball_radius <= 0:
+                self.ball_dy *= -1  # Reverse vertical velocity
+
+            print(
+                f"Location of ball reported by server: x={self.ball_x}, y={self.ball_y}")
 
             # Draw the ball on the canvas
-            cv.circle(canvas, (ball_x, ball_y), ball_radius, ball_color, -1)
+            cv.circle(canvas, (self.ball_x, self.ball_y),
+                      self.ball_radius, self.ball_color, -1)
 
-            frame = VideoFrame.from_ndarray(canvas, format="bgr24")
+            # # Display the frame
+            # cv.startWindowProcess()
+            # cv.imshow("Bouncing Ball", canvas)
 
-            pts, time_base = await self.next_timestamp()
-            frame.pts = pts
-            frame.time_base = time_base
-            return frame
+            # # Exit if 'q' is pressed
+            # if cv.waitKey(1) & 0xFF == ord('q'):
+            #     break
+
+            # cv.destroyAllWindows()
+
+            return canvas
+
+    async def recv(self):
+        print('Inside recv()')
+
+        canvas = self.generate_ball()
+        frame = VideoFrame.from_ndarray(canvas, format="bgr24")
+
+        pts, time_base = await self.next_timestamp()
+        frame.pts = pts
+        frame.time_base = time_base
+        return frame
+
+        # while True:
+        #     # Create a blank canvas
+        #     canvas = np.zeros(
+        #         (self.canvas_height, self.canvas_width, 3), dtype=np.uint8)
+        #     canvas.fill(255)
+
+        #     self.update_ball_position()
+        #     self.print_ball_coordinates()
+        #     # Draw the ball on the canvas
+        #     cv.circle(canvas, (self.ball_x, self.ball_y),
+        #               self.ball_radius, self.ball_color, -1)
+
+        #     frame = VideoFrame.from_ndarray(canvas, format="bgr24")
+
+        #     pts, time_base = await self.next_timestamp()
+        #     frame.pts = pts
+        #     frame.time_base = time_base
+        #     return frame
+
+    def update_ball_position(self):
+        # Update ball position
+        self.ball_x += self.ball_dx
+        self.ball_y += self.ball_dy
+
+        # Check if the ball hits the boundaries
+        if (
+            self.ball_x + self.ball_radius >= self.canvas_width
+            or self.ball_x - self.ball_radius <= 0
+        ):
+            self.ball_dx *= -1  # Reverse horizontal velocity
+        if (
+            self.ball_y + self.ball_radius >= self.canvas_height
+            or self.ball_y - self.ball_radius <= 0
+        ):
+            self.ball_dy *= -1  # Reverse vertical velocity
+
+    def print_ball_coordinates(self):
+        # Print the ball's coordinates
+        print(
+            f"Location of ball reported by server: x={self.ball_x}, y={self.ball_y}"
+        )
 
     async def next_timestamp(self):
         if hasattr(self, "_timestamp"):
