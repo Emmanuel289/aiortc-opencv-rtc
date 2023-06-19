@@ -7,11 +7,13 @@ from aiortc import (
     RTCIceCandidate,
     MediaStreamTrack,
 )
+import os
 from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 from multiprocessing import Process, Queue, Value
 from logger import app_log
 
-HOST_IP = '127.0.0.1'
+
+HOST_IP = os.environ.get('SERVER_HOST', '127.0.0.1')
 PORT_NO = 8080
 
 WIDTH = 640

@@ -1,0 +1,18 @@
+FROM python:3.10
+
+# Install required system dependencies
+RUN apt-get update && apt-get install -y libgl1-mesa-glx
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the necessary files
+COPY client.py /app/
+COPY requirements.txt /app/
+COPY logger.py /app/
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Set the entry point
+CMD ["python", "client.py"]

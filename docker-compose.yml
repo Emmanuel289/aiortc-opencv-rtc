@@ -1,0 +1,20 @@
+version: '3'
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      - 8080:8080
+    depends_on:
+      - redis
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    depends_on:
+      - server
+
+  redis:
+    image: redis:alpine
