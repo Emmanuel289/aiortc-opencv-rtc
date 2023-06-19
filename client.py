@@ -37,11 +37,20 @@ class ImageDisplayReceiver(MediaStreamTrack):
         """
         Receives frames and converts them to ndarray format.
         """
-        print('inside recv')
         while True:
             frame = await self.track.recv()
             image = frame.to_ndarray(format="bgr24")
             frame_queue.put(image)
+
+            # Display ball
+            cv.namedWindow("Bouncing Ball", cv.WINDOW_NORMAL)
+            cv.resizeWindow("Bouncing Ball", WIDTH, HEIGHT)
+
+            cv.imshow("Bouncing Ball", image)
+
+            # Exit if 'q' is pressed
+            if cv.waitKey(1) & 0xFF == ord('q'):
+                break
 
 
 def process_frame(queue, ball_location_x, ball_location_y) -> None:
