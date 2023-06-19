@@ -66,6 +66,43 @@ pytest
 pytest -vv # enable verbose output
 ```
 
+## Docker workflow and Kubernetes Deployment
+
+We use [minikube](https://minikube.sigs.k8s.io/docs/start/) for starting a kube cluster and deploying the application
+
+1. Start Minikube -> `minikube start`
+
+2. Build the Docker images for the server and client applications
+
+```
+docker build -t server .
+docker build -t client .
+```
+
+3. Apply the deployment manifest files:
+
+```
+kubectl apply -f server-deployment.yaml
+kubectl apply -f client-deployment.yaml
+```
+
+This will create the deployments for the server and client applications in your Minikube cluster.
+
+4. Verify that the deployments are running by checking the deployment and pod statuses:
+
+```
+kubectl get deployments
+kubectl get pods
+```
+
+5. Access the server and client logs
+
+```
+kubectl exec -it <server-pod-name> -- /bin/bash  #replace <server-pod-name> with the name of the server pod
+
+kubectl exec -it <client-pod-name> -- /bin/bash #replace <client-pod-name> with the name of the client pod
+```
+
 ## Contributing
 
 Contributions are welcome! If you encounter any issues or have suggestions for improvements, please feel free to open an issue or submit a pull request.
