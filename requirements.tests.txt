@@ -1,4 +1,6 @@
--r requirements.txt
+# -r requirements.txt
 pytest
 pytest-aiohttp
 pytest-asyncio
+pytest-mock
+pytest-timeout

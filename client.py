@@ -17,6 +17,8 @@ PORT_NO = 8080
 WIDTH = 640
 HEIGHT = 480
 
+frame_queue = Queue(20)
+
 
 class ImageDisplayReceiver(MediaStreamTrack):
     """
@@ -53,7 +55,12 @@ def process_frame(queue, ball_location_x, ball_location_y) -> None:
     """
     app_log.info('Processing frames...')
     while True:
-        image = queue.get()
+
+        try:
+            image = queue.get()
+
+        except queue.Empty:
+            print('Empty queue')
 
         # Convert the image to grayscale for easier ball detection
         gray_image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
@@ -66,6 +73,9 @@ def process_frame(queue, ball_location_x, ball_location_y) -> None:
         contours, _ = cv.findContours(
             binary_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
+        # Initialize placeholder for ball coordinates
+        ball_x = None
+        ball_y = None
         # Process each contour
         for contour in contours:
             # Compute the center of each contour
@@ -177,8 +187,6 @@ if __name__ == "__main__":
 
     peer_connection = RTCPeerConnection()
     loop = asyncio.get_event_loop()
-
-    frame_queue = Queue(20)
 
     ball_location_x = Value('i', 0)
     ball_location_y = Value('i', 0)
