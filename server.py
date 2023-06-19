@@ -34,7 +34,7 @@ class BouncingBallTrack(MediaStreamTrack):
         super().__init__()
         self.ball_radius = 10
         self.ball_color = (0, 0, 255)
-        self.ball_speed = 5
+        self.ball_speed = 10
 
         # Define canvas properties
         self.canvas_width = 640
