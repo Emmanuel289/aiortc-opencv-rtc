@@ -52,6 +52,8 @@ The server will run on `localhost (127.0.0.1)` and listen for incoming connectio
 
 The client will connect to the server and display the bouncing ball on the screen. The real-time positions of the ball will be exchanged between the client and the server, with the respective terminals showing the updates. Additionally, the server terminal will display the computed errors between the received ball positions and the actual positions.
 
+Note: You can see the application in action by playing the recording `demo.webm`
+
 ## Testing
 
 To run the unit tests, perform the following steps:
