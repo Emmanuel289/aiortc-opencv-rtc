@@ -2,7 +2,6 @@ import asyncio
 import fractions
 import numpy as np
 import pytest
-import pytest_mock
 from server import compute_errors, BouncingBallTrack, consume_signaling, run_offer, run_signaling, RTCPeerConnection
 from aiortc import RTCSessionDescription
 from aiortc import MediaStreamTrack
