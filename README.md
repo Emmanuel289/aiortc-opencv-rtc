@@ -2,6 +2,19 @@
 
 This project demonstrates RTC with aiortc and OpenCV using an application that showcases TCP signaling, frame transport, and messaging between peers on a local network. The application consists of a client-side and a server-side component. The server generates continuous frames of 2D images of a bouncing ball, which it transmits to the client for display on a screen. TCP socket signaling is used to establish a connection between the client and the server. Additionally, frame transport and data channel messaging is used to exchange the moving images and positions of the bouncing ball between the server and the client. The server also computes and prints the errors between the ball's positions reported by the client and the actual positions of the ball.
 
+<div align="center">
+
+![License](https://img.shields.io/badge/License-MIT-blue.svg)
+![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+![numpy](https://img.shields.io/badge/numpy-1.23.5-blue.svg)
+![opencv-python](https://img.shields.io/badge/opencv--python-4.7.0-blue.svg)
+![aiortc Version](https://img.shields.io/badge/aiortc-%3E%3D1.3.0-blue.svg)
+![aiohttp](https://img.shields.io/badge/aiohttp-3.8.4-blue.svg)
+![aiohttp-requests](https://img.shields.io/badge/aiohttp--requests-0.1.3-blue.svg)
+![Coverage](https://img.shields.io/badge/coverage-95%25-green.svg)
+
+</div>
+
 ## Project Structure
 
 The project structure is organized as follows:
