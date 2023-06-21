@@ -19,9 +19,9 @@ This project demonstrates RTC with aiortc and OpenCV using an application that s
 
 The project structure is organized as follows:
 
-- `server.py`: Contains the server-side code responsible for handling the signaling and media stream handling between clients. It generates a moving ball on the canvas and provides the current ball position to connected clients.
+- `server.py`: Contains the server-side code responsible for generating continuous 2D images/frames of a bouncing ball and transmitting the images and positions of the ball to the connected client.
 
-- `client.py`: Contains the client-side code responsible for displaying the bouncing ball. It processes the received frames, performs ball detection, and sends the current ball position to the server.
+- `client.py`: Contains the client-side code responsible for displaying the bouncing ball on a screen. It processes the received frames from the server, performs ball detection, and reports the real-time positions of the ball to the server.
 
 - `tests_client.py`: Contains unit tests for the client-side code.
 
@@ -63,7 +63,7 @@ The server will run on `localhost (127.0.0.1)` and listen for incoming connectio
 
 3. Start the client -> `python client.py`
 
-The client will connect to the server and display the bouncing ball on the screen. The real-time positions of the ball will be exchanged between the client and the server, with the respective terminals showing the updates. Additionally, the server terminal will display the computed errors between the received ball positions and the actual positions.
+The client will connect to the server and display the bouncing ball on the screen. The real-time positions of the ball will be exchanged between the client and the server, with the respective terminals showing the updates. Additionally, the server terminal will display the computed errors between the positions of the ball as reported by the client and the actual positions.
 
 Note: You can see the application in action by playing the recording `demo.webm`
 
