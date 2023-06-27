@@ -5,6 +5,7 @@ This project demonstrates real time communication using an application that show
 <div align="center">
 
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
+[![Ubuntu Version](https://img.shields.io/badge/Ubuntu-22.04+-orange)](https://releases.ubuntu.com/20.04/)
 ![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![numpy](https://img.shields.io/badge/numpy-1.23.5-blue.svg)
 ![opencv-python](https://img.shields.io/badge/opencv--python-4.7.0-blue.svg)
@@ -29,10 +30,10 @@ The project structure is organized as follows:
 
 ## Requirements
 
+- Ubuntu 22.04 or higher
 - Python 3.10 or higher
 - OpenCV (cv2)
 - aiortc
-- av
 
 ## Setup
 
@@ -50,6 +51,9 @@ source venv/bin/activate
 ```
 pip install -r requirements.txt
 ```
+
+Note: PyPi's [opencv-python](https://pypi.org/project/opencv-python/) is a minimalist package and does not contain many of the required plugins for running GUI applications. In order to get all the required
+dependencies, it is better to build the development version from source. Detailed instructions on how to build from source are available at [Installing OpenCV on Ubuntu](https://docs.opencv.org/3.4/d2/de6/tutorial_py_setup_in_ubuntu.html).
 
 ## Usage
 
@@ -72,7 +76,7 @@ To run the unit tests, perform the following steps:
 1. Install the required testing packages:
    `pip install -r requirements.tests.txt`
 
-2. Run all the unit tests in verbose mode (optional):
+2. Run all the unit tests and optionally enable verbose mode:
 
 ```
 pytest
